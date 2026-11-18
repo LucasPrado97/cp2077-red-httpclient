@@ -7,7 +7,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 NAME="$(sed -n 's/^set(REDMAC_NAME \(.*\))$/\1/p' "$ROOT/macos/CMakeLists.txt")"
-SIGN_ID="${SIGN_ID:-9921DA56B69BB846944ECD1FAB6CCAC526172D37}"
+SIGN_ID="${SIGN_ID:--}"   # "-" = ad-hoc: iOS loads a plugin from Documents only when it is signed by the app's team
 SDK="${RED4EXT_SDK_DIR:-$ROOT/../RED4ext.SDK-macos}"
 B="$ROOT/build-ios"
 if [ ! -f "$B/build.ninja" ]; then
