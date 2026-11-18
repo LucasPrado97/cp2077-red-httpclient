@@ -1,7 +1,11 @@
 #include "HttpPlugin.h"
 
+#if defined(__APPLE__)
+#include "MacSupport.hpp"  // macos/
+#else
 #include <windows.h>
 #include <shellapi.h>
+#endif
 
 namespace RedHttpClient {
 
@@ -23,6 +27,15 @@ void HttpPlugin::load(const RED4ext::v1::Sdk* p_sdk,
   logger = p_sdk->logger;
   handle = p_handle;
 
+#if defined(__APPLE__)
+  // macOS / iOS (CyPort):
+  // - no game state callbacks: the loader's CGameApplication hook is not available on iOS, and RedFileSystem's natives do
+  //   not exist yet at this point anyway. The settings (the "RedHttpClient" storage, config.json) are loaded on the first
+  //   request instead: see can_log().
+  // - the development switches -no-tls and -self-signed are not read: every request is https and the system verifies the
+  //   server certificate (NSURLSession, macos/cpr-apple).
+  return;
+#else
   Red::v1::GameState init{};
   init.OnEnter = [](Red::CGameApplication*) -> bool {
     get()->start();
@@ -69,6 +82,20 @@ void HttpPlugin::load(const RED4ext::v1::Sdk* p_sdk,
     logger->Warn(handle, "Self-signed certificates are allowed. "
                          "This feature is only meant for local development.");
   }
+#endif
+}
+
+bool HttpPlugin::can_log() const {
+#if defined(__APPLE__)
+  // The first request loads the settings (see load()). Requests come from scripts, so the natives of RedFileSystem and
+  // RedData are registered by then, when those plugins are installed. Without them logging stays on, as on Windows.
+  std::call_once(settings_once, [this]() -> void {
+    if (RedMac::TypesRegistered()) {
+      const_cast<HttpPlugin*>(this)->settings.load();
+    }
+  });
+#endif
+  return settings.can_log();
 }
 
 void HttpPlugin::unload() {
@@ -114,7 +141,7 @@ std::string HttpPlugin::log_http_method(const HttpMethod p_method) {
 }
 
 void HttpPlugin::log_error(const cpr::Error& p_error) const {
-  if (logger == nullptr || handle == nullptr || !settings.can_log()) {
+  if (logger == nullptr || handle == nullptr || !can_log()) {
     return;
   }
   logger->Error(handle, "HTTP error:");
@@ -123,7 +150,7 @@ void HttpPlugin::log_error(const cpr::Error& p_error) const {
 }
 
 void HttpPlugin::log_response(const cpr::Response& p_response) const {
-  if (logger == nullptr || handle == nullptr || !settings.can_log()) {
+  if (logger == nullptr || handle == nullptr || !can_log()) {
     return;
   }
   logger->Info(handle, "HTTP response:");

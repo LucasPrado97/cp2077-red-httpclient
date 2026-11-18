@@ -23,7 +23,13 @@ class HttpPlugin {
   bool m_has_tls;
   bool m_has_self_signed;
 
+#if defined(__APPLE__)
+  mutable std::once_flag settings_once;
+#endif
+
   static std::string log_http_method(HttpMethod p_method);
+  // True when requests and responses go to the log (config.json of the "RedHttpClient" storage, "logging").
+  [[nodiscard]] bool can_log() const;
 
  public:
   HttpPlugin();
@@ -46,7 +52,7 @@ class HttpPlugin {
   template <class T>
   void log_request(const HttpMethod p_method, const Red::CString& p_url,
                    const T& p_body, const cpr::Header& p_headers) {
-    if (logger == nullptr || handle == nullptr || !settings.can_log()) {
+    if (logger == nullptr || handle == nullptr || !can_log()) {
       return;
     }
     const std::string method = log_http_method(p_method);

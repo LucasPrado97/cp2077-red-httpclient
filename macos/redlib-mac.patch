@@ -1,0 +1,99 @@
+diff -ru a/Red/Alias.hpp b/Red/Alias.hpp
+--- a/Red/Alias.hpp	2026-11-17 20:44:00
++++ b/Red/Alias.hpp	2026-11-17 20:46:43
+@@ -3,6 +3,11 @@
+ namespace Red
+ {
+ using namespace RED4ext;
++#if defined(__APPLE__)
++// MAC: the system headers (MacTypes.h, through CoreFoundation / Foundation) declare a global ::Handle; with only the using-directive
++// above an unqualified Handle inside Red is ambiguous. A using-declaration makes the SDK's the one that is found.
++using RED4ext::Handle;
++#endif
+ }
+ 
+ namespace Red::Detail
+diff -ru a/Red/TypeInfo/Definition.hpp b/Red/TypeInfo/Definition.hpp
+--- a/Red/TypeInfo/Definition.hpp	2026-11-17 20:44:00
++++ b/Red/TypeInfo/Definition.hpp	2026-11-17 20:47:08
+@@ -12,6 +12,12 @@
+ 
+ namespace Red
+ {
++#if defined(__APPLE__)
++// MAC (Codeware lib/Red): the virtual RegisterFunction can miss the global function map on the Mac game. Defined in
++// macos/MacSupport.cpp.
++void MacPublishGlobal(::RED4ext::CRTTISystem* aRtti, const char* aName, ::RED4ext::CGlobalFunction* aFunc);
++#endif
++
+ template<Scope>
+ struct TypeInfoBuilder;
+ 
+@@ -667,11 +673,9 @@
+ template<typename TClass>
+ class ClassDescriptorDefaultImpl : public ClassDescriptor<TClass>
+ {
+-#if defined(__APPLE__)
+-    bool IsEqual(const void* aLhs, const void* aRhs, uint32_t a3) final // 48
+-#else
++    // MAC: RED4ext.SDK-macos (branch mac-next) declares the virtual `const bool`, like the Windows SDK; upstream RedLib's
++    // __APPLE__ spelling (`bool`) is for another Mac SDK.
+     const bool IsEqual(const void* aLhs, const void* aRhs, uint32_t a3) final // 48
+-#endif
+     {
+         if constexpr (Detail::IsConstructionForwarded<TClass>)
+         {
+@@ -902,6 +906,12 @@
+         func->flags.isStatic = true;
+ 
+         RegisterFunction(func);
++#if defined(__APPLE__) // MAC (Codeware lib/Red)
++        if (!GetFunction(CName(aName)))
++        {
++            MacPublishGlobal(this, aName, func);
++        }
++#endif
+ 
+         return func;
+     }
+@@ -927,6 +937,12 @@
+ 
+             Detail::DescribeNativeFunction(func, AFunction);
+             RegisterFunction(func);
++#if defined(__APPLE__) // MAC (Codeware lib/Red)
++            if (!GetFunction(CName(aName)))
++            {
++                MacPublishGlobal(this, aName, func);
++            }
++#endif
+ 
+             return func;
+         }
+diff -ru a/Red/TypeInfo/Registrar.hpp b/Red/TypeInfo/Registrar.hpp
+--- a/Red/TypeInfo/Registrar.hpp	2026-11-17 20:44:00
++++ b/Red/TypeInfo/Registrar.hpp	2026-11-17 20:44:00
+@@ -19,6 +19,24 @@
+         QueuePendingDescribeCallbacks();
+     }
+ 
++    // MAC (Codeware lib/Red): the Mac game never runs the RTTI register callbacks, so RegisterDiscovered() would queue them for
++    // nothing. The plugin runs the queued callbacks itself from an RTTI post-register callback (macos/MacSupport.cpp).
++    static inline void RunPending()
++    {
++        ProcessPendingRegisterCallbacks();
++        ProcessPendingDescriberCallbacks();
++    }
++
++    static inline std::size_t PendingRegisterCount()
++    {
++        return s_registerCallbacks.size();
++    }
++
++    static inline std::size_t PendingDescribeCount()
++    {
++        return s_describeCallbacks.size();
++    }
++
+     static inline void AddRegisterCallback(Callback aRegister)
+     {
+         if (aRegister)

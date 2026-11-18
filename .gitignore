@@ -11,3 +11,7 @@ dist/
 # Redscript dependencies
 scripts/Codeware/
 scripts/Logs.reds
+# macOS / iOS (CyPort) builds: macos/CMakeLists.txt, macos/ios-stage.sh
+build-mac/
+build-ios/
+deploy/

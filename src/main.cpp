@@ -4,6 +4,10 @@
 #include "Config.h"
 #include "HttpPlugin.h"
 
+#if defined(__APPLE__)
+#include "MacSupport.hpp"  // macos/
+#endif
+
 namespace RedHttpClient {
 
 RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle p_handle,
@@ -11,7 +15,14 @@ RED4EXT_C_EXPORT bool RED4EXT_CALL Main(RED4ext::v1::PluginHandle p_handle,
                                         const RED4ext::v1::Sdk* p_sdk) {
   switch (p_reason) {
     case RED4ext::v1::EMainReason::Load: {
+#if defined(__APPLE__)
+      // macOS / iOS: the game never runs the RTTI register callbacks RedLib queues; the types register from an RTTI
+      // post-register callback (macos/MacSupport.cpp).
+      RedMac::Init(p_sdk, p_handle);
+      RedMac::RegisterTypesWhenReady();
+#else
       Red::TypeInfoRegistrar::RegisterDiscovered();
+#endif
       HttpPlugin::get()->load(p_sdk, p_handle);
       break;
     }
